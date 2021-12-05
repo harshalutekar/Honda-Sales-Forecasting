@@ -1,0 +1,456 @@
+---
+title: "BF Group Project"
+author: "Harshal Utekar, Stephen Lee, Simran Dhawan"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Importing Libraries
+
+```{r}
+library(fpp)
+library(fpp2)
+library(TTR)
+library(data.table)
+```
+
+## Importing the data
+
+```{r}
+library(readxl)
+honda <- read_excel("D:/Rutgers/BF/BF Group Project/Honda Sales Data.xlsx")
+```
+
+
+#### Data Type
+
+```{r}
+str(honda)
+class(honda)
+honda_month <- month.abb[honda$Month]
+```
+
+## Converting into a Time-Series
+
+```{r}
+honda_ts <- ts(honda$Car_Sales,frequency = 12,start = c(2005,1),end = c(2021,8))
+honda_ts
+class(honda_ts)
+attributes(honda_ts)
+```
+
+## Plot the time-series
+
+```{r}
+plot(honda_ts)
+```
+Observation: 
+          1. We can see that in the starting period from 2005-2009 there is seasonality and an increasing trend. With the 2008-2009                      Financial crisis, the sales drop to the lowest. 
+          2. We see a significant increased sales spike in 2012 in the February period. This spike is accounted for the new models that were              launched in the period which led to significant growth in the sales. 
+          3. However, after this period we can see the trend has been increasing just a bit. The data is relatively horizontal and very                  seasonal. 
+          4. The 2020 Covid period led to a sever drop in the sales, a good recovery can be seen after the period. 
+          5. However, the sales again dropped in 2021 accounting to the shortages of chip manufacturing of cars.
+
+#### Determining Central Tendency
+
+```{r}
+summary(honda_ts)
+boxplot(honda_ts)
+ggplot(honda,aes(x=honda_month,y=Car_Sales))+geom_boxplot()+scale_x_discrete(limits = month.abb)
+```
+1. From the summary, we can see that on average the sales have been around 1,00,000 and have never dropped below the 50,000 mark. 
+2. The box plot denoting the monthly sales indicates that the lowest sales have always been in the January month. While the highest sales      period has been between June-August period, with August showing the highest sales from all months.
+
+## Decomposition using STL
+
+```{r}
+honda_fit <- stl(honda_ts,s.window = "periodic")
+plot(honda_fit)
+```
+
+## Decomposition using Decompose
+
+```{r,fig.height=8,fig.width=10}
+honda_d_fit <- decompose(honda_ts)
+plot(honda_d_fit)
+```
+1. As we observed in the time-series plot, seasonality plays a huge role in the sales data.
+2. The trend line seems to be on the up and up except for a few instances which were caused due to external factors.
+3. The randomness is relatively low in the data except the 2012 spike and 2020 covid downfall.
+4. The time-series is additive.
+
+
+## Seasonally Adjust the Time-series:
+
+```{r}
+honda_seas_adj <- seasadj(honda_d_fit)
+plot(honda_seas_adj)
+plot(honda_ts)
+lines(honda_seas_adj,col="Red")
+```
+When seasonally adjusting the time series we can see that the graph does not change a lot, the increased and decreased spikes are still the same, only the seasonality has reduced. Considering the seasonality adjusted plot for modeling wouldn't make sense as seasonality is a key factor in the data.
+
+
+#### Seasonal Indices:
+
+```{r}
+honda_d_fit$type
+honda_d_fit$figure
+honda_s_indice <- round(honda_d_fit$figure/10000,2)
+honda_s_indice
+```
+Highest: August
+Lowest: January
+
+
+### Acf
+
+```{r}
+honda_acf <- Acf(honda_ts,type="correlation")
+```
+We can see that for every 12th period there is a higher correlation due to the seasonality of the data. 
+## Mean Forecast
+
+```{r}
+honda_mean_f <- meanf(honda_ts,h=12)
+plot(honda_mean_f)
+
+```
+#### Accuracy for the Mean Forecast:
+```{r}
+acc_mean <- accuracy(honda_mean_f)
+```
+
+## Naive Forecast
+
+```{r}
+honda_naive_f <- naive(honda_ts,h=12)
+plot(honda_naive_f)
+plot(honda_naive_f$residuals)
+gghistogram(honda_naive_f$residuals)
+ggplot(honda_ts,aes(x=honda_naive_f$fitted,y=honda_naive_f$residuals))+geom_point()
+Acf(honda_naive_f$residuals)
+acc_naive <- accuracy(honda_naive_f)
+acc_naive
+```
+
+We can see that with the naive forecast the data is slightly skewed. The MAPE for Naive is 16 percent. We can use the Naive as a baseline model to see if other models perform better or worse than the naive. 
+
+## Random Walk
+
+```{r}
+honda_rwf_f <- rwf(honda_ts,12,drift = TRUE)
+plot(honda_rwf_f)
+gghistogram(honda_rwf_f$residuals)
+ggplot(honda_ts,aes(x=honda_rwf_f$fitted,y=honda_rwf_f$residuals))+geom_point()
+acc_rwf <- accuracy(honda_rwf_f)
+acc_rwf
+```
+
+With random walk forecast, the forecast is similar to what we saw in the Naive method. The data is slightly skewed and the MAPE measure is 16 percent. Although the difference we can see is in the point forecasts. The naive method gave a standard point forecast as output for the whole 12 month period while in random walk we can see that the point forecast slightly increases on a month-to-month basis.
+
+## Snaive Forecast
+
+```{r}
+honda_snaive_f <- snaive(honda_ts,12)
+plot(honda_snaive_f)
+gghistogram(honda_snaive_f$residuals)
+ggplot(honda_ts,aes(x=honda_snaive_f$fitted,y=honda_snaive_f$residuals))+geom_point()
+acc_snaive <- accuracy(honda_snaive_f)
+acc_snaive
+```
+With the Snaive we can see that the forecast shows an up/down trend as the seasonality factor which is an important factor in this sales data comes into consideration. The histogram is around the 0 scale denoting it relatively normal than the naive and random walk.
+The MAPE value is also lower than the naive method at 14 percent, indicating snaive to be a better model for forecasting.
+
+## Simple Moving Average:
+
+```{r}
+honda_sma_f3  <- ma(honda_ts,order = 3)
+honda_sma_f6  <- ma(honda_ts,order = 6)
+honda_sma_f12 <- ma(honda_ts,order = 12)
+```
+
+Plotting the time-line:
+
+```{r,fig.width=10,fig.height=8}
+plot(honda_ts)
+lines(honda_sma_f3,col="red")
+lines(honda_sma_f6,col="blue")
+lines(honda_sma_f12,col="green")
+```
+
+```{r,fig.width=10,fig.height=8}
+honda_sma_forecast1 <- forecast(honda_sma_f12,h=12)
+honda_sma_forecast2 <- forecast(honda_sma_f3,h=12)
+honda_sma_forecast3 <- forecast(honda_sma_f6,h=12)
+plot(honda_sma_forecast1)
+plot(honda_sma_forecast2)
+plot(honda_sma_forecast3)
+
+honda_sma_forecast3
+```
+
+For the simple moving averages, we can see that the moving average with degree 12 is the exact trend line of the time-series. Considering that as a good forecast method would not be ideal in this scenario as the seasonality does modify the output of the forecast.
+However, for the moving average degrees of 3 and 6 we can see that the forecasts are not that bad.
+
+#### Accuracy for Simple moving average:
+```{r}
+acc_sma1 <- accuracy(honda_sma_forecast1)
+acc_sma2 <- accuracy(honda_sma_forecast2)
+acc_sma3 <- accuracy(honda_sma_forecast3)
+acc_sma2
+acc_sma3
+```
+We can see that for a degree 3, the MAPE measure is 4 percent while for degree 6 the MAPE measure is 1.9 percent which basically indicates that the model forecast is 98 percent accurate. But the issue here is that this is considered based off the whole time-line. So the spikes influence on the time-series gets normalized. So, even though the error percent is lower this is not a good forecast in our case.
+
+## ETS method
+
+```{r}
+honda_ets <- ets(honda_ts)
+gghistogram(honda_ets$residuals)
+ggplot(honda_ts,aes(x=honda_ets$fitted,y=honda_ets$residuals))+geom_point()
+plot(honda_ets)
+honda_ets_forecast <- forecast(honda_ets,h=12)
+plot(honda_ets_forecast)
+acc_ets <- accuracy(honda_ets)
+acc_ets
+```
+In the ETS method as well, we can see that the histogram is skewed. The forecast on observation looks good, but the MAPE measure is higher than that of the moving average method at 9.5 percent.
+
+## Holts-Winter
+
+```{r}
+honda_hw_f <- HoltWinters(honda_ts)
+plot(honda_hw_f)
+honda_hw_forecast <- forecast(honda_hw_f,h=12)
+plot(honda_hw_forecast)
+acc_hw <- accuracy(honda_hw_forecast)
+acc_hw
+```
+With the HoltWinters method, we can see that the point forecast is similar to the ETS model, but the MAPE measure is 9.8 percent, a bit worse than the ETS model as well.
+
+
+# Subsetting the data:
+
+With the 2012 spike that we observed in the time-series we can say that the data prior to that would not have much impact on the forecasts that we need. With that in mind, we subset the data and consider the time-series from 2012 to check whether the forecasts and accuracy measures improve or not.
+
+```{r}
+honda1 <- read_excel("D:/Rutgers/BF/BF Group Project/Honda Sales Data - Copy.xlsx")
+```
+## Converting into a Time-Series
+
+```{r}
+honda_subts <- ts(honda1$Car_Sales,frequency = 12,start = c(2012,1),end = c(2021,8))
+honda_subts
+attributes(honda_subts)
+plot(honda_subts)
+```
+
+
+#### Central Tendency
+
+
+```{r}
+summary(honda_subts)
+boxplot(honda_subts)
+```
+We can see from the summary that the mean sales increased to 1,10,000 from the 1,00,000 mean for the whole data.
+
+## Decomposition using STL
+
+```{r}
+honda_fit1 <- stl(honda_subts,s.window = "periodic")
+plot(honda_fit1)
+```
+
+## Decomposition using Decompose
+
+```{r,fig.height=8,fig.width=10}
+honda_d_fit1 <- decompose(honda_subts)
+plot(honda_d_fit1)
+```
+
+The trend line is similar to that of the whole data with difference of the downward trend being excluded from it.The seasonality of the data has not changed as is expected.
+
+## Seasonally Adjust the Time-series:
+
+```{r}
+honda_seas_adj1 <- seasadj(honda_d_fit1)
+plot(honda_seas_adj1)
+plot(honda_subts)
+lines(honda_seas_adj1,col="Blue")
+```
+#### Seasonal Indices:
+
+```{r}
+honda_d_fit1$type
+honda_d_fit1$figure
+honda_s_indice1 <- round(honda_d_fit1$figure/10000,2)
+honda_s_indice1
+```
+Highest: August
+Lowest: January
+
+After subsetting the data as well the highest sales and lowest sales months are still the same indicating that the seasonality and trend is constant every year.
+
+### Acf
+
+```{r}
+honda_acf1 <- Acf(honda_subts,type="correlation")
+```
+Like the whole dataset, the subsetted dataset also has a correlation for every 12th lag due to the seasonality factor of the data.
+
+## Mean Forecast
+
+```{r}
+honda_mean_f1 <- meanf(honda_subts,h=12)
+plot(honda_mean_f1)
+```
+#### Accuracy for the Mean Forecast:
+```{r}
+acc_mean1 <- accuracy(honda_mean_f1)
+acc_mean1
+```
+
+The MAPE value for Mean forecast is 13.6 percent which is better than the mean forecast value for the whole dataset. 
+
+## Naive Forecast
+
+```{r}
+honda_naive_fs <- naive(honda_subts,h=12)
+plot(honda_naive_fs)
+plot(honda_naive_fs$residuals)
+gghistogram(honda_naive_fs$residuals)
+ggplot(honda_subts,aes(x=honda_naive_fs$fitted,y=honda_naive_fs$residuals))+geom_point()
+Acf(honda_naive_fs$residuals)
+acc_naive1 <- accuracy(honda_naive_fs)
+acc_naive1
+```
+
+The subsetted naive forecast has histogram plot like the whole naive forecast, however, the accuracy measure is relatively better in the subset model at 15.7 percent than the whole model which was at 16 percent
+
+## Random Walk
+
+```{r}
+honda_rwf_fs <- rwf(honda_subts,12,drift=TRUE)
+plot(honda_rwf_fs)
+gghistogram(honda_rwf_fs$residuals)
+ggplot(honda_subts,aes(x=honda_rwf_fs$fitted,y=honda_rwf_fs$residuals))+geom_point()
+acc_rwf1 <- accuracy(honda_rwf_fs)
+acc_rwf1
+```
+For the random walk model, the MAPE value is better than the whole dataset MAPE value and same as the subset Naive forecast of 15.7 percent. 
+
+## Snaive Forecast
+
+```{r}
+honda_snaive_fs <- snaive(honda_subts,12)
+plot(honda_snaive_fs)
+gghistogram(honda_snaive_fs$residuals)
+ggplot(honda_subts,aes(x=honda_snaive_fs$fitted,y=honda_snaive_fs$residuals))+geom_point()
+acc_snaive1 <- accuracy(honda_snaive_fs)
+acc_snaive1
+```
+
+In case of the subset Snaive forecast, the forecasts seems better than the forecast for the whole dataset. Also, the MAPE measure is better for the subset data with 11.46 percent. 
+
+
+## Simple Moving Average:
+
+```{r}
+honda_sma_f3s  <- ma(honda_subts,order = 3)
+honda_sma_f6s <- ma(honda_subts,order = 6)
+honda_sma_f12s <- ma(honda_subts,order = 12)
+```
+
+Plotting the time-line:
+
+```{r,fig.width=10,fig.height=8}
+plot(honda_subts)
+lines(honda_sma_f3s,col="red")
+lines(honda_sma_f6s,col="blue")
+lines(honda_sma_f12s,col="green")
+```
+
+```{r,fig.width=10,fig.height=8}
+honda_sma_forecast1s <- forecast(honda_sma_f12s,h=12)
+honda_sma_forecast2s <- forecast(honda_sma_f3s,h=12)
+honda_sma_forecast3s <- forecast(honda_sma_f6s,h=12)
+plot(honda_sma_forecast1s)
+plot(honda_sma_forecast2s)
+plot(honda_sma_forecast3s)
+```
+
+In case of the simple moving averages for the subset of data, we can see that the green line represents the moving average with degree 12, which replicates the trend line of the subset of data. If we observe the forecast done with a moving average of degree 12, the forecasts shows an upward trend which ideally is a false forecast as the actual sales are moving down. So, moving average with a degree 12 would not be ideal to consider for the ideal model of forecast.
+
+If we observe the moving average forecasts for degree 3 and 6, we can see that even for degree 6, the moving average forecast shows an upward trend instead of a downward trend hence this would also not be an ideal model to be considered in terms of ideal forecasting.
+
+The moving average with degree 3 for this subset data is a significantly better. The forecast seems to follow the trend as it follows and seems to show somewhat accurate forecasts. 
+#### Accuracy for Simple moving average:
+```{r}
+acc_sma1s <- accuracy(honda_sma_forecast1s)
+acc_sma2s <- accuracy(honda_sma_forecast2s)
+acc_sma3s <- accuracy(honda_sma_forecast3s)
+acc_sma2s
+acc_sma3s
+```
+As we can see the moving average for degree 6 MAPE is 2.16 percent which is quite low. However, the forecast prediction seems to be off from the observed data. Hence considering this forecast would not be suitable as an accurate model prediction.
+
+In case of moving average of degree 3, the MAPE is 3.5 percent which is also significantly lower. The forecasts also seems to be following the observed data. This model could be considered as one of the ideal prediction models in our case.
+
+## ETS method
+
+```{r}
+honda_ets1 <- ets(honda_subts)
+plot(honda_ets1)
+gghistogram(honda_ets1$residuals)
+ggplot(honda_subts,aes(x=honda_ets1$fitted,y=honda_ets1$residuals))+geom_point()
+honda_ets_forecast_s <- forecast(honda_ets1,h=12)
+plot(honda_ets_forecast_s)
+acc_ets_s <- accuracy(honda_ets1)
+acc_ets_s
+```
+
+In case of ETS model, the forecast looks similar to that of the ets prediction for the whole data. The MAPE measure is also about the same as that of the whole data at 9.57 percent. This is better than the Naive model but moving averages model seems much better in terms of forecasts as well as Accuracy measures than the ETS model.
+
+## Holts-Winter
+
+```{r}
+honda_hw_fs <- HoltWinters(honda_subts)
+plot(honda_hw_fs)
+honda_hw_forecast_s <- forecast(honda_hw_fs,h=12)
+plot(honda_hw_forecast_s)
+acc_hws <- accuracy(honda_hw_forecast_s)
+acc_hws
+```
+The Holtwinter for subset data is better than the Holtwinters for the whole data. The MAPE measure is proof itself that subset model is better than the whole data model with MAPE measure of 8.9 compared to MAPE measure of 9.87 for the whole data model. 
+
+#Comparing all accuracy Measures from a Table:
+
+```{r}
+row1 <- as.data.frame.array(acc_mean)
+row1 <- rbind(acc_mean,acc_mean1,acc_naive,acc_naive1,acc_rwf,acc_rwf1,acc_snaive,acc_snaive1,acc_ets,acc_ets_s,acc_hw,acc_hws,
+              acc_sma2,acc_sma2s,acc_sma3,acc_sma3s)
+models <- c('Mean','Mean-Subset','Naive','Naive-Subset','Rwf','Rwf-Subset','Snaive','Snaive-Subset','ETS','ETS-Subset','Holtwinters',
+            'Holtwinters-sub','Moving Avg.3','Moving Avg.3-Sub','Moving Avg. 6','Moving Avg.6-Sub')
+as.data.frame(models)
+data.table(models,row1)
+```
+
+#Conclusion:
+
+        As we compare all the models based on the MAPE measures we can see that all the models performed a bit better on the subset data instead of the whole data with a few exceptions. 
+        The best model with least MAPE value were:
+                1. Moving average 6 with Whole data - 1.9 percent error
+                2. Moving average 6 with subset data - 2.16 percent error
+                3. Moving average 3 with subset data - 3.5 percent error
+        However, error is a manipulative term, least error does not always signify that the model with least error is the best model. In this is the case in our scenario as well. For the whole dataset, the error rate cuts down as it considers the 6 instances every time and calculates the measures. This neutralizes the spikes that we see in our data which provides us with a less error percent. But the forecast does not look that ideal considering the real-world aspect. So, even though moving average 6 has less error percent for MAPE it is not the best fit model for our data.
+        Similar is the case for the moving average 6 subset data. The forecast shows that the sales value would keep on increasing while in real-time the sales value are decreasing. So although, the error percent is less here, this model is also not an ideal fit for our sales data.
+        Now if we observe the Moving average 3 subset data, the forecast is similar to the real-time scenario. The sales keep on decreasing for a few month as would be observed and then it starts to pick up. 
+```{r}
+honda_sma_forecast2s
+```
+        
+        We compared these results with the real-world sales value for the October and November values, and the prediction seems to be following the trend. The values are slightly off, considering it has a 3.5 percent error it can be justified, but the trend and patterns are similar to the real world scenario. Hence, this seems the best fit for the model compared to any other models that we ran. 
+        
